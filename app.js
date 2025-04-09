@@ -35,8 +35,75 @@ const oauthConfig = {
 
 const oauthClient = new AuthorizationCode(oauthConfig);
 
-// Variables for OAuth flow - still need state for CSRF protection
+// Variables for OAuth flow
 const expectedStateForAuthorizationCode = crypto.randomBytes(15).toString("hex");
+
+// Function to get and save account keys
+async function getSavedAccountKeys() {
+  try {
+    const accountKeys = await redisClient.get('account_keys');
+    return accountKeys ? JSON.parse(accountKeys) : [];
+  } catch (error) {
+    console.error("Error retrieving account keys:", error.message);
+    return [];
+  }
+}
+
+async function saveAccountKey(accountKey, accountName) {
+  try {
+    if (!accountKey) return;
+    
+    // Get existing account keys
+    let accounts = await getSavedAccountKeys();
+    
+    // Check if account key already exists
+    const existingIndex = accounts.findIndex(acc => acc.key === accountKey);
+    
+    if (existingIndex >= 0) {
+      // Update the account name if it exists
+      accounts[existingIndex].name = accountName || accounts[existingIndex].name;
+    } else {
+      // Add the new account key
+      accounts.push({
+        key: accountKey,
+        name: accountName || `Account ${accounts.length + 1}`,
+        dateAdded: new Date().toISOString()
+      });
+    }
+    
+    // Save updated accounts
+    await redisClient.set('account_keys', JSON.stringify(accounts));
+    
+    // Set this as the current account key for API calls
+    await redisClient.set('current_account_key', accountKey);
+    
+    return accounts;
+  } catch (error) {
+    console.error("Error saving account key:", error.message);
+    return await getSavedAccountKeys();
+  }
+}
+
+// Function to get current account key
+async function getCurrentAccountKey() {
+  // Try to get the current account key
+  const currentKey = await redisClient.get('current_account_key');
+  
+  if (currentKey) {
+    return currentKey;
+  }
+  
+  // If no current key is set, use the first one from the saved accounts
+  const accounts = await getSavedAccountKeys();
+  
+  if (accounts && accounts.length > 0) {
+    await redisClient.set('current_account_key', accounts[0].key);
+    return accounts[0].key;
+  }
+  
+  // If no saved accounts, use the environment variable
+  return process.env.GOTO_ACCOUNT_KEY;
+}
 
 // Helper function to format phone number with country code
 function formatPhoneNumber(countryCode, phoneNumber) {
@@ -45,8 +112,131 @@ function formatPhoneNumber(countryCode, phoneNumber) {
   return `+${countryCode}${digitsOnly}`;
 }
 
+// Function to fetch authorized phone numbers from GoTo Connect API
+async function fetchAuthorizedPhoneNumbers() {
+  try {
+    const accessToken = await redisClient.get('access_token');
+    const accountKey = await getCurrentAccountKey();
+    
+    if (!accessToken) {
+      console.log("No access token available");
+      return [];
+    }
+    
+    if (!accountKey) {
+      console.log("No account key available");
+      return [];
+    }
+    
+    // API endpoint with accountKey as query parameter
+    const phoneNumbersEndpoint = `https://api.goto.com/voice-admin/v1/phone-numbers?accountKey=${accountKey}`;
+    
+    console.log("Fetching phone numbers from API...");
+    console.log("Using account key:", accountKey);
+    
+    const response = await fetch(phoneNumbersEndpoint, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Authorization": `Bearer ${accessToken}`
+      }
+    });
+    
+    if (!response.ok) {
+      console.error(`Error fetching phone numbers: ${response.status}`);
+      const errorText = await response.text();
+      console.error("Response:", errorText);
+      return [];
+    }
+    
+    const data = await response.json();
+    console.log("API Response:", JSON.stringify(data, null, 2));
+    
+    // Extract phone numbers and caller ID names from the response
+    let phoneNumbersWithCallerIds = [];
+    
+    if (data && Array.isArray(data.items)) {
+      phoneNumbersWithCallerIds = data.items
+        .filter(item => item.number) // Make sure there's a number field
+        .map(item => ({
+          number: item.number,
+          callerIdName: item.callerIdName || item.name || '',
+          name: item.name || ''
+        }));
+    }
+    
+    console.log("Extracted phone numbers with caller IDs:", phoneNumbersWithCallerIds);
+    
+    // Store in Redis with 24-hour expiration
+    if (phoneNumbersWithCallerIds.length > 0) {
+      await redisClient.set('authorized_phone_numbers', JSON.stringify(phoneNumbersWithCallerIds), {
+        EX: 86400 // 24 hours
+      });
+    }
+    
+    return phoneNumbersWithCallerIds;
+  } catch (error) {
+    console.error("Error fetching authorized phone numbers:", error.message);
+    return [];
+  }
+}
+
+// Function to get authorized phone numbers (from Redis or API)
+async function getAuthorizedPhoneNumbers() {
+  // Try to get from Redis first
+  const cachedNumbers = await redisClient.get('authorized_phone_numbers');
+  
+  if (cachedNumbers) {
+    try {
+      const numbers = JSON.parse(cachedNumbers);
+      console.log("Using cached phone numbers:", numbers);
+      return numbers;
+    } catch (e) {
+      console.error("Error parsing cached phone numbers:", e.message);
+      // Continue to fetch from API if parsing fails
+    }
+  }
+  
+  // If not in Redis or parsing failed, fetch from API
+  return await fetchAuthorizedPhoneNumbers();
+}
+
 /** Serve the SMS form with country code dropdown */
-app.get("/", (req, res) => {
+app.get("/", async (req, res) => {
+  // Try to get authorized phone numbers
+  const authorizedNumbers = await getAuthorizedPhoneNumbers();
+  console.log("Authorized numbers for dropdown:", authorizedNumbers);
+  console.log("Number of authorized numbers:", authorizedNumbers ? authorizedNumbers.length : 0);
+  
+  // Get account information
+  const accounts = await getSavedAccountKeys();
+  const currentAccountKey = await getCurrentAccountKey();
+  
+  let accountOptions = '';
+  if (accounts && accounts.length > 0) {
+    accountOptions = accounts
+      .map(account => `<option value="${account.key}" ${currentAccountKey === account.key ? 'selected' : ''}>${account.name}</option>`)
+      .join('');
+  }
+  
+  let ownerNumbersOptions = '';
+  
+  if (authorizedNumbers && authorizedNumbers.length > 0) {
+    // Create dropdown options from authorized numbers with caller ID names
+    ownerNumbersOptions = authorizedNumbers
+      .map(item => {
+        const displayName = item.callerIdName ? `${item.number} (${item.callerIdName})` : item.number;
+        return `<option value="${item.number}">${displayName}</option>`;
+      })
+      .join('');
+    
+    console.log("Generated dropdown options:", ownerNumbersOptions);
+  } else {
+    // If no authorized numbers available, show default text
+    ownerNumbersOptions = '<option value="">-- No phone numbers found --</option>';
+    console.log("No phone numbers found for dropdown");
+  }
+
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -62,25 +252,80 @@ app.get("/", (req, res) => {
         .phone-number { flex-grow: 1; }
         button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         button:hover { background-color: #45a049; }
+        .refresh-button { padding: 5px 10px; margin-left: 10px; background-color: #f0f0f0; color: #333; border: 1px solid #ccc; cursor: pointer; width: auto; }
+        .manual-entry { background-color: #f9f9f9; padding: 15px; margin-top: 15px; border-radius: 5px; border: 1px solid #ddd; }
+        .settings-section { background-color: #f9f9f9; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #ddd; }
+        .settings-toggle { color: #2196F3; cursor: pointer; text-decoration: underline; }
+        .caller-id { color: #666; font-style: italic; }
       </style>
+      <script>
+        function toggleSettings() {
+          const settings = document.getElementById('accountSettings');
+          if (settings.style.display === 'none') {
+            settings.style.display = 'block';
+          } else {
+            settings.style.display = 'none';
+          }
+        }
+      </script>
     </head>
     <body>
       <h1>Send an SMS</h1>
+      
+      <!-- Account Settings -->
+      <p class="settings-toggle" onclick="toggleSettings()">Account Settings ▼</p>
+      <div id="accountSettings" class="settings-section" style="display: none;">
+        <h2>GoTo Connect Account</h2>
+        
+        <!-- Account Selector -->
+        ${accounts && accounts.length > 0 ? `
+        <form method="POST" action="/select-account">
+          <label for="accountKey">Select Account:</label>
+          <select name="accountKey" id="accountKey">
+            ${accountOptions}
+          </select>
+          <button type="submit">Switch Account</button>
+        </form>
+        <hr>
+        ` : ''}
+        
+        <!-- Add Account Form -->
+        <form method="POST" action="/add-account">
+          <h3>Add New Account</h3>
+          <label for="newAccountKey">Account Key:</label>
+          <input type="text" name="accountKey" id="newAccountKey" required placeholder="Enter your GoTo Connect Account Key">
+          
+          <label for="accountName">Account Name (Optional):</label>
+          <input type="text" name="accountName" id="accountName" placeholder="e.g., My Company Account">
+          
+          <button type="submit">Add Account</button>
+        </form>
+      </div>
+      
+      <!-- SMS Form -->
       <form method="POST" action="/send-sms">
         <label>Owner Phone Number:</label>
-        <div class="phone-group">
-          <select name="ownerCountryCode" class="country-code">
-            <option value="1" selected>+1</option>
-            <option value="44">+44</option>
-            <option value="61">+61</option>
-            <option value="33">+33</option>
-            <option value="49">+49</option>
-            <option value="81">+81</option>
-            <option value="86">+86</option>
-            <!-- Add more country codes as needed -->
-          </select>
-          <input type="text" name="ownerPhoneNumber" class="phone-number" placeholder="10-digit phone number" required pattern="[0-9]{10}">
+        <div style="display: flex; align-items: center;">
+          ${authorizedNumbers && authorizedNumbers.length > 0 ? 
+            `<select name="ownerPhoneNumber" required style="flex-grow: 1;">
+              ${ownerNumbersOptions}
+             </select>` : 
+            `<div class="phone-group" style="flex-grow: 1;">
+              <select name="ownerCountryCode" class="country-code">
+                <option value="1" selected>+1</option>
+                <option value="44">+44</option>
+                <option value="61">+61</option>
+                <option value="33">+33</option>
+                <option value="49">+49</option>
+                <option value="81">+81</option>
+                <option value="86">+86</option>
+              </select>
+              <input type="text" name="ownerPhoneNumber" class="phone-number" placeholder="10-digit phone number" required pattern="[0-9]{10}">
+            </div>`
+          }
+          <button type="button" class="refresh-button" onclick="window.location.href='/refresh-numbers'">Refresh</button>
         </div>
+        <br>
         
         <label>Contact Phone Number (Recipient):</label>
         <div class="phone-group">
@@ -92,7 +337,6 @@ app.get("/", (req, res) => {
             <option value="49">+49</option>
             <option value="81">+81</option>
             <option value="86">+86</option>
-            <!-- Add more country codes as needed -->
           </select>
           <input type="text" name="contactPhoneNumber" class="phone-number" placeholder="10-digit phone number" required pattern="[0-9]{10}">
         </div>
@@ -102,6 +346,27 @@ app.get("/", (req, res) => {
 
         <button type="submit">Send SMS</button>
       </form>
+      
+      <!-- Debugging Info for Phone Numbers -->
+      <div class="manual-entry">
+        <h3>Phone Numbers Status</h3>
+        <p>Found ${authorizedNumbers ? authorizedNumbers.length : 0} phone numbers.</p>
+        ${authorizedNumbers && authorizedNumbers.length > 0 ? 
+          `<p>Available phone numbers:</p>
+          <ul>
+            ${authorizedNumbers.map(item => 
+              `<li>${item.number} <span class="caller-id">${item.callerIdName ? `(${item.callerIdName})` : ''}</span></li>`
+            ).join('')}
+          </ul>` : 
+          `<p>No phone numbers were found. Possible reasons:</p>
+          <ol>
+            <li>Make sure you have <a href="/authorize">authorized</a> the app with the required permissions.</li>
+            <li>Make sure you've configured the correct <a href="#" onclick="toggleSettings(); return false;">account key</a>.</li>
+            <li>Try clicking the "Refresh" button above.</li>
+          </ol>`
+        }
+      </div>
+      
       <br>
       <a href="/authorize">Click here to authorize the app.</a>
     </body>
@@ -109,11 +374,19 @@ app.get("/", (req, res) => {
   `);
 });
 
+/** Endpoint to explicitly refresh phone numbers list */
+app.get("/refresh-numbers", async (req, res) => {
+  await redisClient.del('authorized_phone_numbers');
+  const numbers = await fetchAuthorizedPhoneNumbers();
+  console.log("Refreshed phone numbers:", numbers);
+  res.redirect('/');
+});
+
 /** Redirect user for OAuth authorization */
 app.get("/authorize", (req, res) => {
   const authorizationUri = oauthClient.authorizeURL({
     redirect_uri: process.env.OAUTH_REDIRECT_URI,
-    scope: "messaging.v1.send",
+    scope: "messaging.v1.send voice-admin.v1.read", // Updated with the correct scope
     state: expectedStateForAuthorizationCode,
   });
 
@@ -139,10 +412,14 @@ app.get("/login/oauth2/code/goto", async (req, res) => {
     const expiresIn = tokenResponse.token.expires_in || 3600; // Default to 1 hour if not provided
     
     await redisClient.set('access_token', accessToken, {
-      EX: expiresIn // Set expiration time in seconds
+      EX: expiresIn
     });
     
     console.log("Access token stored in Redis");
+    
+    // Fetch authorized phone numbers after successful authorization
+    const phoneNumbers = await fetchAuthorizedPhoneNumbers();
+    console.log("Fetched phone numbers after authorization:", phoneNumbers);
     
     res.status(200).send(
       `<h1>Authorization Successful</h1>
@@ -155,25 +432,56 @@ app.get("/login/oauth2/code/goto", async (req, res) => {
   }
 });
 
-/** Handle SMS submission with country code formatting */
+/** Handle account management routes */
+app.post("/add-account", async (req, res) => {
+  const { accountKey, accountName } = req.body;
+  
+  if (!accountKey) {
+    res.status(400).send("<h1>Error: Account key is required</h1>");
+    return;
+  }
+  
+  await saveAccountKey(accountKey, accountName);
+  await redisClient.del('authorized_phone_numbers'); // Clear cached phone numbers
+  
+  res.redirect('/');
+});
+
+app.post("/select-account", async (req, res) => {
+  const { accountKey } = req.body;
+  
+  if (accountKey) {
+    await redisClient.set('current_account_key', accountKey);
+    await redisClient.del('authorized_phone_numbers'); // Clear cached phone numbers
+  }
+  
+  res.redirect('/');
+});
+
+/** Handle SMS submission with selected owner phone and formatted contact phone */
 app.post("/send-sms", async (req, res) => {
   const { 
-    ownerCountryCode, ownerPhoneNumber, 
+    ownerPhoneNumber, ownerCountryCode,
     contactCountryCode, contactPhoneNumber, 
     messageBody 
   } = req.body;
 
-  if (!ownerPhoneNumber || !contactPhoneNumber || !messageBody || messageBody.trim().length === 0) {
-    res.status(400).send("<h1>Error: Please fill in all fields. The message must contain valid text.</h1>");
+  if (!messageBody || messageBody.trim().length === 0) {
+    res.status(400).send("<h1>Error: Please provide a message.</h1>");
     return;
   }
-
-  // Format phone numbers with country codes
-  const formattedOwnerPhone = formatPhoneNumber(ownerCountryCode, ownerPhoneNumber);
+  
+  // Determine the owner phone number (either directly selected or formatted)
+  let formattedOwnerPhone = ownerPhoneNumber;
+  if (ownerCountryCode) {
+    formattedOwnerPhone = formatPhoneNumber(ownerCountryCode, ownerPhoneNumber);
+  }
+  
+  // Format the contact phone number
   const formattedContactPhone = formatPhoneNumber(contactCountryCode, contactPhoneNumber);
   
-  console.log(`Formatted owner phone: ${formattedOwnerPhone}`);
-  console.log(`Formatted contact phone: ${formattedContactPhone}`);
+  console.log(`Owner phone: ${formattedOwnerPhone}`);
+  console.log(`Contact phone: ${formattedContactPhone}`);
   
   try {
     // Get token from Redis
@@ -224,6 +532,7 @@ app.post("/send-sms", async (req, res) => {
         </head>
         <body>
           <h1 class="success">SMS Sent Successfully!</h1>
+          <p><strong>From:</strong> ${formattedOwnerPhone}</p>
           <p><strong>To:</strong> ${formattedContactPhone}</p>
           <p><strong>Message:</strong> ${messageBody}</p>
           <a href="/">Go back to SMS Form</a>
