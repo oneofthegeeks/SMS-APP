@@ -38,25 +38,67 @@ const oauthClient = new AuthorizationCode(oauthConfig);
 // Variables for OAuth flow - still need state for CSRF protection
 const expectedStateForAuthorizationCode = crypto.randomBytes(15).toString("hex");
 
-/** Serve the SMS form */
+// Helper function to format phone number with country code
+function formatPhoneNumber(countryCode, phoneNumber) {
+  // Remove any non-digit characters
+  const digitsOnly = phoneNumber.replace(/\D/g, '');
+  return `+${countryCode}${digitsOnly}`;
+}
+
+/** Serve the SMS form with country code dropdown */
 app.get("/", (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
     <head>
       <title>Send SMS</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        input, textarea, select, button { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
+        label { display: block; margin-bottom: 5px; }
+        .phone-group { display: flex; }
+        .country-code { width: 80px; margin-right: 10px; }
+        .phone-number { flex-grow: 1; }
+        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+      </style>
     </head>
     <body>
       <h1>Send an SMS</h1>
       <form method="POST" action="/send-sms">
-        <label for="ownerPhoneNumber">Owner Phone Number:</label><br>
-        <input type="text" id="ownerPhoneNumber" name="ownerPhoneNumber" placeholder="+1234567890" required><br><br>
+        <label>Owner Phone Number:</label>
+        <div class="phone-group">
+          <select name="ownerCountryCode" class="country-code">
+            <option value="1" selected>+1</option>
+            <option value="44">+44</option>
+            <option value="61">+61</option>
+            <option value="33">+33</option>
+            <option value="49">+49</option>
+            <option value="81">+81</option>
+            <option value="86">+86</option>
+            <!-- Add more country codes as needed -->
+          </select>
+          <input type="text" name="ownerPhoneNumber" class="phone-number" placeholder="10-digit phone number" required pattern="[0-9]{10}">
+        </div>
+        
+        <label>Contact Phone Number (Recipient):</label>
+        <div class="phone-group">
+          <select name="contactCountryCode" class="country-code">
+            <option value="1" selected>+1</option>
+            <option value="44">+44</option>
+            <option value="61">+61</option>
+            <option value="33">+33</option>
+            <option value="49">+49</option>
+            <option value="81">+81</option>
+            <option value="86">+86</option>
+            <!-- Add more country codes as needed -->
+          </select>
+          <input type="text" name="contactPhoneNumber" class="phone-number" placeholder="10-digit phone number" required pattern="[0-9]{10}">
+        </div>
 
-        <label for="contactPhoneNumber">Contact Phone Number (Recipient):</label><br>
-        <input type="text" id="contactPhoneNumber" name="contactPhoneNumber" placeholder="+9876543210" required><br><br>
-
-        <label for="messageBody">Message:</label><br>
-        <textarea id="messageBody" name="messageBody" placeholder="Enter your SMS message here" required></textarea><br><br>
+        <label for="messageBody">Message:</label>
+        <textarea id="messageBody" name="messageBody" placeholder="Enter your SMS message here" required rows="4"></textarea>
 
         <button type="submit">Send SMS</button>
       </form>
@@ -103,7 +145,9 @@ app.get("/login/oauth2/code/goto", async (req, res) => {
     console.log("Access token stored in Redis");
     
     res.status(200).send(
-      `<h1>Authorization Successful</h1><p>Your access token has been received and securely stored. You may now send SMS messages.</p><br><a href="/">Go to SMS Form</a>`
+      `<h1>Authorization Successful</h1>
+       <p>Your access token has been received and securely stored. You may now send SMS messages.</p><br>
+       <a href="/">Go to SMS Form</a>`
     );
   } catch (error) {
     console.error("Error exchanging authorization code:", error.message);
@@ -111,22 +155,26 @@ app.get("/login/oauth2/code/goto", async (req, res) => {
   }
 });
 
-/** Handle SMS submission */
+/** Handle SMS submission with country code formatting */
 app.post("/send-sms", async (req, res) => {
-  const { ownerPhoneNumber, contactPhoneNumber, messageBody } = req.body;
+  const { 
+    ownerCountryCode, ownerPhoneNumber, 
+    contactCountryCode, contactPhoneNumber, 
+    messageBody 
+  } = req.body;
 
   if (!ownerPhoneNumber || !contactPhoneNumber || !messageBody || messageBody.trim().length === 0) {
     res.status(400).send("<h1>Error: Please fill in all fields. The message must contain valid text.</h1>");
     return;
   }
 
-  // Validate phone numbers are in E.164 format (basic check)
-  const phoneRegex = /^\+[1-9]\d{1,14}$/;
-  if (!phoneRegex.test(ownerPhoneNumber) || !phoneRegex.test(contactPhoneNumber)) {
-    res.status(400).send("<h1>Error: Phone numbers must be in E.164 format (e.g., +1234567890)</h1>");
-    return;
-  }
-
+  // Format phone numbers with country codes
+  const formattedOwnerPhone = formatPhoneNumber(ownerCountryCode, ownerPhoneNumber);
+  const formattedContactPhone = formatPhoneNumber(contactCountryCode, contactPhoneNumber);
+  
+  console.log(`Formatted owner phone: ${formattedOwnerPhone}`);
+  console.log(`Formatted contact phone: ${formattedContactPhone}`);
+  
   try {
     // Get token from Redis
     const accessToken = await redisClient.get('access_token');
@@ -138,10 +186,12 @@ app.post("/send-sms", async (req, res) => {
 
     const smsEndpoint = "https://api.goto.com/messaging/v1/messages";
     const payload = {
-      ownerPhoneNumber: ownerPhoneNumber,
-      contactPhoneNumbers: [contactPhoneNumber],
+      ownerPhoneNumber: formattedOwnerPhone,
+      contactPhoneNumbers: [formattedContactPhone],
       body: messageBody.trim(),
     };
+
+    console.log("Sending SMS with payload:", JSON.stringify(payload));
 
     const response = await fetch(smsEndpoint, {
       method: "POST",
@@ -161,9 +211,25 @@ app.post("/send-sms", async (req, res) => {
     const responseData = await response.json();
 
     if (response.ok) {
-      res.status(201).send(
-        `<h1>SMS Sent Successfully!</h1><p>To: ${contactPhoneNumber}</p><p>Message: ${messageBody}</p><br><a href="/">Go back to SMS Form</a>`
-      );
+      res.status(201).send(`
+        <html>
+        <head>
+          <title>SMS Sent</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+            .success { color: green; }
+            a { display: inline-block; margin-top: 15px; text-decoration: none; color: #4CAF50; }
+          </style>
+        </head>
+        <body>
+          <h1 class="success">SMS Sent Successfully!</h1>
+          <p><strong>To:</strong> ${formattedContactPhone}</p>
+          <p><strong>Message:</strong> ${messageBody}</p>
+          <a href="/">Go back to SMS Form</a>
+        </body>
+        </html>
+      `);
     } else {
       console.error("Error Response from SMS API:", responseData);
       res.status(400).send(`<h1>Error Sending SMS</h1><p>${responseData.message || 'Unknown error'}</p><br><a href="/">Go back to SMS Form</a>`);
