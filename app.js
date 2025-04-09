@@ -153,28 +153,30 @@ async function fetchAuthorizedPhoneNumbers() {
     console.log("API Response:", JSON.stringify(data, null, 2));
     
     // Extract phone numbers and caller ID names from the response
-    let phoneNumbersWithCallerIds = [];
+    let phoneNumbersWithDetails = [];
     
     if (data && Array.isArray(data.items)) {
-      phoneNumbersWithCallerIds = data.items
+      phoneNumbersWithDetails = data.items
         .filter(item => item.number) // Make sure there's a number field
         .map(item => ({
           number: item.number,
           callerIdName: item.callerIdName || item.name || '',
-          name: item.name || ''
+          name: item.name || '',
+          smsEnabled: item.smsEnabled === true || item.smsEnabled === "true", // Track SMS capability, but don't filter by it
+          status: item.status || ''
         }));
     }
     
-    console.log("Extracted phone numbers with caller IDs:", phoneNumbersWithCallerIds);
+    console.log("Extracted phone numbers with details:", phoneNumbersWithDetails);
     
     // Store in Redis with 24-hour expiration
-    if (phoneNumbersWithCallerIds.length > 0) {
-      await redisClient.set('authorized_phone_numbers', JSON.stringify(phoneNumbersWithCallerIds), {
+    if (phoneNumbersWithDetails.length > 0) {
+      await redisClient.set('authorized_phone_numbers', JSON.stringify(phoneNumbersWithDetails), {
         EX: 86400 // 24 hours
       });
     }
     
-    return phoneNumbersWithCallerIds;
+    return phoneNumbersWithDetails;
   } catch (error) {
     console.error("Error fetching authorized phone numbers:", error.message);
     return [];
@@ -208,6 +210,10 @@ app.get("/", async (req, res) => {
   console.log("Authorized numbers for dropdown:", authorizedNumbers);
   console.log("Number of authorized numbers:", authorizedNumbers ? authorizedNumbers.length : 0);
   
+  // Count SMS-enabled numbers
+  const smsEnabledNumbers = authorizedNumbers.filter(item => item.smsEnabled);
+  console.log("Number of SMS-enabled numbers:", smsEnabledNumbers.length);
+  
   // Get account information
   const accounts = await getSavedAccountKeys();
   const currentAccountKey = await getCurrentAccountKey();
@@ -221,8 +227,9 @@ app.get("/", async (req, res) => {
   
   let ownerNumbersOptions = '';
   
+  // Use ALL phone numbers in the dropdown, not just SMS-enabled ones
   if (authorizedNumbers && authorizedNumbers.length > 0) {
-    // Create dropdown options from authorized numbers with caller ID names
+    // Create dropdown options from all authorized numbers with caller ID names
     ownerNumbersOptions = authorizedNumbers
       .map(item => {
         const displayName = item.callerIdName ? `${item.number} (${item.callerIdName})` : item.number;
@@ -230,7 +237,7 @@ app.get("/", async (req, res) => {
       })
       .join('');
     
-    console.log("Generated dropdown options:", ownerNumbersOptions);
+    console.log("Generated dropdown options for all numbers:", ownerNumbersOptions);
   } else {
     // If no authorized numbers available, show default text
     ownerNumbersOptions = '<option value="">-- No phone numbers found --</option>';
@@ -257,6 +264,12 @@ app.get("/", async (req, res) => {
         .settings-section { background-color: #f9f9f9; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #ddd; }
         .settings-toggle { color: #2196F3; cursor: pointer; text-decoration: underline; }
         .caller-id { color: #666; font-style: italic; }
+        .sms-enabled { color: #4CAF50; }
+        .sms-disabled { color: #f44336; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        .note { font-size: 0.85em; color: #666; margin-top: 5px; }
       </style>
       <script>
         function toggleSettings() {
@@ -325,6 +338,7 @@ app.get("/", async (req, res) => {
           }
           <button type="button" class="refresh-button" onclick="window.location.href='/refresh-numbers'">Refresh</button>
         </div>
+        <p class="note">Note: SMS capability status might not be accurately reported by the API.</p>
         <br>
         
         <label>Contact Phone Number (Recipient):</label>
@@ -347,17 +361,29 @@ app.get("/", async (req, res) => {
         <button type="submit">Send SMS</button>
       </form>
       
-      <!-- Debugging Info for Phone Numbers -->
+      <!-- Phone Numbers Status Table -->
       <div class="manual-entry">
         <h3>Phone Numbers Status</h3>
-        <p>Found ${authorizedNumbers ? authorizedNumbers.length : 0} phone numbers.</p>
+        <p>Found ${authorizedNumbers ? authorizedNumbers.length : 0} phone numbers (${smsEnabledNumbers ? smsEnabledNumbers.length : 0} reported as SMS-enabled).</p>
+        
         ${authorizedNumbers && authorizedNumbers.length > 0 ? 
-          `<p>Available phone numbers:</p>
-          <ul>
+          `<table>
+            <tr>
+              <th>Number</th>
+              <th>Caller ID</th>
+              <th>SMS Status</th>
+              <th>Status</th>
+            </tr>
             ${authorizedNumbers.map(item => 
-              `<li>${item.number} <span class="caller-id">${item.callerIdName ? `(${item.callerIdName})` : ''}</span></li>`
+              `<tr>
+                <td>${item.number}</td>
+                <td>${item.callerIdName || ''}</td>
+                <td class="${item.smsEnabled ? 'sms-enabled' : 'sms-disabled'}">${item.smsEnabled ? 'Enabled' : 'Disabled'}</td>
+                <td>${item.status || ''}</td>
+              </tr>`
             ).join('')}
-          </ul>` : 
+          </table>
+          <p class="note">Note: SMS capability status shown above might not be accurately reported by the API.</p>` : 
           `<p>No phone numbers were found. Possible reasons:</p>
           <ol>
             <li>Make sure you have <a href="/authorize">authorized</a> the app with the required permissions.</li>
