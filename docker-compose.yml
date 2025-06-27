@@ -1,7 +1,7 @@
 services:
   app:
     build:
-      context: https://github.com/yourusername/your-repository.git#main
+      context: .
       dockerfile: Dockerfile
     restart: always
     expose:
@@ -29,7 +29,7 @@ services:
 
   nginx:
     build:
-      context: https://github.com/yourusername/your-repository.git#main
+      context: .
       dockerfile: nginx.Dockerfile
     restart: always
     ports:

@@ -39,7 +39,7 @@ Paste the following content:
 services:
   app:
     build:
-      context: https://github.com/oneofthegeeks/SMS-APP.git
+      context: .
       dockerfile: Dockerfile
     restart: always
     expose:
@@ -67,7 +67,7 @@ services:
 
   nginx:
     build:
-      context: https://github.com/oneofthegeeks/SMS-APP.git
+      context: .
       dockerfile: nginx.Dockerfile
     restart: always
     ports:
@@ -134,7 +134,7 @@ GOTO_ACCOUNT_KEY=your-account-key-here
    - **Scheme**: http
    - **Forward Hostname/IP**: your server IP
    - **Forward Port**: 8080
-   - **SSL**: Enable (use Let’s Encrypt)
+   - **SSL**: Enable (use Let's Encrypt)
 
 ### Option 2: Standard NGINX Reverse Proxy
 
@@ -199,7 +199,7 @@ docker compose logs -f app
 ### Authentication Issues
 
 - Double-check your OAuth credentials in `.env`
-- Make sure the Redirect URI matches what’s in the GoTo Developer Portal
+- Make sure the Redirect URI matches what's in the GoTo Developer Portal
 - Confirm your account has the correct permissions
 
 ### SMS Sending Issues

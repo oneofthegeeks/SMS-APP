@@ -19,9 +19,14 @@ const redisClient = createClient({
 
 // Connect to Redis
 (async () => {
-  redisClient.on('error', (err) => console.log('Redis Client Error', err));
-  await redisClient.connect();
-  console.log('Connected to Redis');
+  try {
+    redisClient.on('error', (err) => console.log('Redis Client Error', err));
+    await redisClient.connect();
+    console.log('Connected to Redis');
+  } catch (error) {
+    console.error('Failed to connect to Redis:', error.message);
+    process.exit(1);
+  }
 })();
 
 // OAuth client configuration
@@ -38,9 +43,6 @@ const oauthConfig = {
 };
 
 const oauthClient = new AuthorizationCode(oauthConfig);
-
-// Variables for OAuth flow
-const expectedStateForAuthorizationCode = crypto.randomBytes(15).toString("hex");
 
 // Function to get and save account keys
 async function getSavedAccountKeys() {
@@ -420,11 +422,17 @@ app.get("/refresh-numbers", async (req, res) => {
 });
 
 /** Redirect user for OAuth authorization */
-app.get("/authorize", (req, res) => {
+app.get("/authorize", async (req, res) => {
+  // Generate a unique state for this authorization request
+  const state = crypto.randomBytes(15).toString("hex");
+  
+  // Store the state in Redis with a short expiration (5 minutes)
+  await redisClient.set(`oauth_state:${state}`, 'pending', { EX: 300 });
+  
   const authorizationUri = oauthClient.authorizeURL({
     redirect_uri: process.env.OAUTH_REDIRECT_URI,
     scope: "messaging.v1.send voice-admin.v1.read", // Updated with the correct scope
-    state: expectedStateForAuthorizationCode,
+    state: state,
   });
 
   console.log("Authorization URL:", authorizationUri);
@@ -435,10 +443,20 @@ app.get("/authorize", (req, res) => {
 app.get("/login/oauth2/code/goto", async (req, res) => {
   const { code, state } = req.query;
 
-  if (state !== expectedStateForAuthorizationCode || !code) {
-    res.status(403).send("<h1>Error: Invalid state or authorization code</h1>");
+  if (!code || !state) {
+    res.status(403).send("<h1>Error: Missing authorization code or state</h1>");
     return;
   }
+
+  // Verify the state parameter
+  const storedState = await redisClient.get(`oauth_state:${state}`);
+  if (!storedState) {
+    res.status(403).send("<h1>Error: Invalid or expired state parameter</h1>");
+    return;
+  }
+
+  // Remove the state from Redis after successful validation
+  await redisClient.del(`oauth_state:${state}`);
 
   const tokenParams = { code, redirect_uri: process.env.OAUTH_REDIRECT_URI };
   try {
