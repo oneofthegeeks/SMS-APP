@@ -39,7 +39,7 @@ Paste the following content:
 services:
   app:
     build:
-      context: https://github.com/yourusername/goto-sms-sender.git#main
+      context: https://github.com/oneofthegeeks/SMS-APP.git
       dockerfile: Dockerfile
     restart: always
     expose:
@@ -67,7 +67,7 @@ services:
 
   nginx:
     build:
-      context: https://github.com/yourusername/goto-sms-sender.git#main
+      context: https://github.com/oneofthegeeks/SMS-APP.git
       dockerfile: nginx.Dockerfile
     restart: always
     ports:
@@ -87,8 +87,6 @@ volumes:
   redis-data:
   nginx-logs:
 </code></pre>
-
-> Replace `yourusername/goto-sms-sender.git` with your actual GitHub repo URL.
 
 ---
 
