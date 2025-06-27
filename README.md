@@ -34,7 +34,7 @@ Create the file:
 
 Paste the following content:
 
-<pre><code>version: '3.8'
+<pre><code>
 
 services:
   app:
