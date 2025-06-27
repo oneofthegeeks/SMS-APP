@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    restart: always
+    ports:
+      - "5000:5000"  # Map container port to host port
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - OAUTH_SERVICE_URL=${OAUTH_SERVICE_URL}
+      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}
+      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
+      - GOTO_ACCOUNT_KEY=${GOTO_ACCOUNT_KEY}
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    restart: always
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis-data:
