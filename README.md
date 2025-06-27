@@ -1,25 +1,26 @@
-GoTo Connect SMS Sender
+# GoTo Connect SMS Sender
+
 A containerized application for sending SMS messages through GoTo Connect's API.
 
-Deployment Instructions
+## Deployment Instructions
+
 These instructions will guide you through deploying the GoTo Connect SMS Sender application using Docker Compose, pulling directly from this GitHub repository.
 
-Prerequisites
-A server with Docker and Docker Compose installed
-A GoTo Connect account with API access
-A valid OAuth client registered with GoTo Connect
-A domain name pointed to your server (optional, for production use)
-Quick Setup
-Create a deployment directory:
-bash
+### Prerequisites
 
-Collapse
-Save
-Copy
-1
-2
+- A server with Docker and Docker Compose installed
+- A GoTo Connect account with API access
+- A valid OAuth client registered with GoTo Connect
+- A domain name pointed to your server (optional, for production use)
+
+### Quick Setup
+
+1. **Create a deployment directory**:
+```bash
 mkdir -p /opt/goto-sms
 cd /opt/goto-sms
+
+
 Create a docker-compose.yml file:
 bash
 
