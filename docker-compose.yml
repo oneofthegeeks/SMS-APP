@@ -1,9 +1,11 @@
 services:
   app:
-    build: .
+    build:
+      context: https://github.com/yourusername/your-repository.git#main
+      dockerfile: Dockerfile
     restart: always
-    ports:
-      - "5000:5000"  # Map container port to host port
+    expose:
+      - "5000"
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
@@ -25,9 +27,24 @@ services:
     networks:
       - app-network
 
+  nginx:
+    build:
+      context: https://github.com/yourusername/your-repository.git#main
+      dockerfile: nginx.Dockerfile
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
 
 volumes:
   redis-data:
+  nginx-logs:
