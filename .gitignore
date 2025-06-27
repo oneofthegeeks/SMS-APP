@@ -5,5 +5,5 @@
 named temp
 temp/
 
-Ignore ALL .env files
+# Ignore ALL .env files
 *.env
