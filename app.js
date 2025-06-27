@@ -205,6 +205,15 @@ async function getAuthorizedPhoneNumbers() {
 
 /** Serve the SMS form with country code dropdown */
 app.get("/", async (req, res) => {
+  // Check if we have a valid access token first
+  const accessToken = await redisClient.get('access_token');
+  
+  // If no access token is available, redirect to the authorization page
+  if (!accessToken) {
+    console.log("No valid access token found. Redirecting to authorization page.");
+    return res.redirect('/authorize');
+  }
+  
   // Try to get authorized phone numbers
   const authorizedNumbers = await getAuthorizedPhoneNumbers();
   console.log("Authorized numbers for dropdown:", authorizedNumbers);
@@ -354,10 +363,8 @@ app.get("/", async (req, res) => {
           </select>
           <input type="text" name="contactPhoneNumber" class="phone-number" placeholder="10-digit phone number" required pattern="[0-9]{10}">
         </div>
-
         <label for="messageBody">Message:</label>
         <textarea id="messageBody" name="messageBody" placeholder="Enter your SMS message here" required rows="4"></textarea>
-
         <button type="submit">Send SMS</button>
       </form>
       
@@ -394,7 +401,7 @@ app.get("/", async (req, res) => {
       </div>
       
       <br>
-      <a href="/authorize">Click here to authorize the app.</a>
+      <a href="/authorize">Re-authorize App</a>
     </body>
     </html>
   `);
