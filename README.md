@@ -2,113 +2,39 @@
 
 A containerized application for sending SMS messages through GoTo Connect's API.
 
-## Deployment Instructions
+---
 
-These instructions will guide you through deploying the GoTo Connect SMS Sender application using Docker Compose, pulling directly from this GitHub repository.
+## 🚀 Deployment Instructions
 
-### Prerequisites
+These instructions will guide you through deploying the GoTo Connect SMS Sender application using Docker Compose.
 
-- A server with Docker and Docker Compose installed
+### ✅ Prerequisites
+
+- Docker and Docker Compose installed on your server
 - A GoTo Connect account with API access
 - A valid OAuth client registered with GoTo Connect
-- A domain name pointed to your server (optional, for production use)
+- (Optional) A domain name pointed to your server for production use
 
-### Quick Setup
+---
 
-1. **Create a deployment directory**:
-```bash
-mkdir -p /opt/goto-sms
+## ⚡ Quick Setup
+
+### 1. Create a deployment directory
+
+<pre><code>mkdir -p /opt/goto-sms
 cd /opt/goto-sms
+</code></pre>
 
+### 2. Create a `docker-compose.yml` file
 
-Create a docker-compose.yml file:
-bash
+Create the file:
 
-Collapse
-Save
-Copy
-1
-nano docker-compose.yml
+<pre><code>nano docker-compose.yml
+</code></pre>
+
 Paste the following content:
 
-yaml
-
-Collapse
-Save
-Copy
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43
-44
-45
-46
-47
-48
-49
-50
-51
-52
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-version: '3.8'
+<pre><code>version: '3.8'
 
 services:
   app:
@@ -160,85 +86,61 @@ networks:
 volumes:
   redis-data:
   nginx-logs:
-Note: Replace yourusername/goto-sms-sender.git with the actual GitHub repository URL. 
+</code></pre>
 
-Create an environment file:
-bash
+> Replace `yourusername/goto-sms-sender.git` with your actual GitHub repo URL.
 
-Collapse
-Save
-Copy
-1
-nano .env
+---
+
+### 3. Create a `.env` file
+
+<pre><code>nano .env
+</code></pre>
+
 Add your GoTo Connect credentials:
 
-
-Collapse
-
-Run
-Save
-Copy
-1
-2
-3
-4
-5
-6
-7
-8
-9
-# GoTo Connect OAuth Configuration
+<pre><code># GoTo Connect OAuth Configuration
 OAUTH_SERVICE_URL=https://authentication.logmeininc.com
 OAUTH_CLIENT_ID=your-client-id-here
 OAUTH_CLIENT_SECRET=your-client-secret-here
 OAUTH_REDIRECT_URI=http://your-domain.com/login/oauth2/code/goto
-# or for local testing: http://localhost:8080/login/oauth2/code/goto
+# For local testing: http://localhost:8080/login/oauth2/code/goto
 
 # GoTo Connect Account Key
 GOTO_ACCOUNT_KEY=your-account-key-here
-Deploy the application:
-bash
+</code></pre>
 
-Collapse
-Save
-Copy
-1
-docker compose up -d
-Access the application:
-If you're running it locally: http://localhost:8080
-If you're running it on a server: http://your-server-ip:8080
-Configuring Domain Access
-Option 1: Using NGINX Proxy Manager
-If you're using NGINX Proxy Manager:
+---
 
-Log in to your NGINX Proxy Manager
-Create a new Proxy Host:
-Domain: your-domain.com
-Scheme: http
-Forward Hostname/IP: Your server IP
-Forward Port: 8080
-Enable SSL: Yes (using Let's Encrypt)
-Option 2: Using a Reverse Proxy
-If you're using a standard NGINX reverse proxy, create a site configuration:
+### 4. Deploy the application
 
-nginx
+<pre><code>docker compose up -d
+</code></pre>
 
-Collapse
-Save
-Copy
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-server {
+---
+
+## 🌐 Access the Application
+
+- **Local**: http://localhost:8080  
+- **Server**: http://your-server-ip:8080
+
+---
+
+## 🌍 Configuring Domain Access
+
+### Option 1: NGINX Proxy Manager
+
+1. Log in to NGINX Proxy Manager
+2. Create a new Proxy Host:
+   - **Domain**: your-domain.com
+   - **Scheme**: http
+   - **Forward Hostname/IP**: your server IP
+   - **Forward Port**: 8080
+   - **SSL**: Enable (use Let’s Encrypt)
+
+### Option 2: Standard NGINX Reverse Proxy
+
+<pre><code>server {
     listen 80;
     server_name your-domain.com;
 
@@ -250,49 +152,36 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
-OAuth Client Setup
-Log in to the GoTo Connect Developer Portal
-Navigate to OAuth Clients and create or edit your client
-Ensure the Redirect URI matches your environment:
-Production: https://your-domain.com/login/oauth2/code/goto
-Development: http://localhost:8080/login/oauth2/code/goto
-Include the scopes: messaging.v1.send and voice-admin.v1.read
-Updating the Application
-To update to the latest version:
+</code></pre>
 
-bash
+---
 
-Collapse
-Save
-Copy
-1
-2
-3
-4
-cd /opt/goto-sms
+## 🔐 OAuth Client Setup
+
+1. Log in to the [GoTo Developer Portal](https://developer.goto.com/)
+2. Navigate to **OAuth Clients**
+3. Set Redirect URIs:
+   - **Production**: `https://your-domain.com/login/oauth2/code/goto`
+   - **Development**: `http://localhost:8080/login/oauth2/code/goto`
+4. Scopes:
+   - `messaging.v1.send`
+   - `voice-admin.v1.read`
+
+---
+
+## 🔄 Updating the Application
+
+<pre><code>cd /opt/goto-sms
 docker compose pull
 docker compose build --no-cache
 docker compose up -d
-Checking Logs
-To view application logs:
+</code></pre>
 
-bash
+---
 
-Collapse
-Save
-Copy
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-# App logs
+## 📜 Viewing Logs
+
+<pre><code># App logs
 docker compose logs app
 
 # NGINX logs
@@ -303,69 +192,72 @@ docker compose logs redis
 
 # Follow logs in real-time
 docker compose logs -f app
-Troubleshooting
-Authentication Issues
-If you're having trouble authenticating:
+</code></pre>
 
-Verify your OAuth client credentials in the .env file
-Ensure the redirect URI exactly matches what's configured in the GoTo Developer Portal
-Check that your account has the necessary permissions
-SMS Sending Issues
-If SMS messages aren't sending:
+---
 
-Verify your account key is correct
-Ensure the phone numbers are in E.164 format (e.g., +18005551234)
-Check that your account has SMS capabilities enabled
-Container Issues
-If containers aren't starting:
+## 🛠️ Troubleshooting
 
-bash
+### Authentication Issues
 
-Collapse
-Save
-Copy
-1
-2
-3
-4
-5
-# Check container status
+- Double-check your OAuth credentials in `.env`
+- Make sure the Redirect URI matches what’s in the GoTo Developer Portal
+- Confirm your account has the correct permissions
+
+### SMS Sending Issues
+
+- Verify your `GOTO_ACCOUNT_KEY`
+- Ensure phone numbers are in E.164 format (e.g. `+18005551234`)
+- Check if SMS functionality is enabled on your account
+
+### Container Issues
+
+<pre><code># Check container status
 docker compose ps
 
-# View detailed container information
-docker inspect <container_id>
-Architecture
-This application consists of three containerized services:
+# View container details
+docker inspect &lt;container_id&gt;
+</code></pre>
 
-Node.js Application: Handles the web interface and API interactions
-Redis: Stores authentication tokens and phone number information
-NGINX: Serves as a web server and reverse proxy
-Data Persistence
-Redis data is stored in a Docker volume. To back up this data:
+---
 
-bash
+## 🧱 Architecture
 
-Collapse
-Save
-Copy
-1
-2
-3
-4
-5
-6
-7
-# Create a backup
-docker compose exec redis redis-cli SAVE
+This application consists of:
+
+- **Node.js App**: Handles API and front-end
+- **Redis**: Stores tokens and message data
+- **NGINX**: Reverse proxy and static server
+
+---
+
+## 💾 Data Persistence
+
+Redis data is stored in a Docker volume.
+
+### Backup Redis:
+
+<pre><code>docker compose exec redis redis-cli SAVE
 docker cp $(docker compose ps -q redis):/data/dump.rdb ./redis-backup.rdb
+</code></pre>
 
-# Restore from backup
-docker cp ./redis-backup.rdb $(docker compose ps -q redis):/data/dump.rdb
+### Restore Redis:
+
+<pre><code>docker cp ./redis-backup.rdb $(docker compose ps -q redis):/data/dump.rdb
 docker compose restart redis
-Security Notes
-Keep your .env file secure and never commit it to source control
-Consider setting up a Redis password for production deployments
-Use HTTPS in production environments
-Regularly update your Docker images and dependencies
-License
+</code></pre>
+
+---
+
+## 🔒 Security Notes
+
+- Never commit your `.env` file to version control
+- Consider setting a Redis password in production
+- Always use HTTPS for live environments
+- Regularly update Docker images and dependencies
+
+---
+
+## 📄 License
+
 MIT License
