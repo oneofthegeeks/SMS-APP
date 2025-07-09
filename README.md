@@ -1,4 +1,4 @@
-# GoTo Connect SMS Sender
+# GoTo Connect SMS Sender UPDATED
 
 A modern, containerized web application for sending SMS messages through GoTo Connect's API. Built with Node.js, Redis, and Docker.
 
