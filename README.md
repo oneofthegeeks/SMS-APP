@@ -1,144 +1,185 @@
 # GoTo Connect SMS Sender
 
-A containerized application for sending SMS messages through GoTo Connect's API.
+A modern, containerized web application for sending SMS messages through GoTo Connect's API. Built with Node.js, Redis, and Docker.
 
----
+## ✨ Features
 
-## 🚀 Deployment Instructions
+- 🔐 **OAuth 2.0 Authentication** - Secure authentication with GoTo Connect
+- 📱 **SMS Sending** - Send SMS messages to any phone number
+- 📞 **Phone Number Management** - View and manage your authorized phone numbers
+- 🏢 **Multi-Account Support** - Switch between different GoTo Connect accounts
+- 🐳 **Docker Ready** - Easy deployment with Docker Compose
+- 🔄 **Token Management** - Automatic token refresh and storage
+- 📊 **Real-time Status** - View SMS capability status for your numbers
 
-These instructions will guide you through deploying the GoTo Connect SMS Sender application using Docker Compose.
+## 🚀 Quick Start
 
-### ✅ Prerequisites
+### Prerequisites
 
-- Docker and Docker Compose installed on your server
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 - A GoTo Connect account with API access
-- A valid OAuth client registered with GoTo Connect
-- (Optional) A domain name pointed to your server for production use
+- OAuth client credentials from [GoTo Developer Portal](https://developer.goto.com/)
 
----
+### Installation Options
 
-## ⚡ Quick Setup
+#### Option 1: Using Docker Hub (Recommended)
 
-### 1. Create a deployment directory
+1. **Pull the image**
+   ```bash
+   docker pull oneofthegeeks/goto-sms-sender:latest
+   ```
 
-<pre><code>mkdir -p /opt/goto-sms
-cd /opt/goto-sms
-</code></pre>
+2. **Create a directory and download files**
+   ```bash
+   mkdir goto-sms-sender && cd goto-sms-sender
+   curl -O https://raw.githubusercontent.com/oneofthegeeks/goto-sms-sender/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/oneofthegeeks/goto-sms-sender/main/env.example
+   ```
 
-### 2. Create a `docker-compose.yml` file
+3. **Set up environment variables**
+   ```bash
+   cp env.example .env
+   # Edit .env with your GoTo Connect credentials
+   ```
 
-Create the file:
+4. **Start the application**
+   ```bash
+   docker compose up -d
+   ```
 
-<pre><code>nano docker-compose.yml
-</code></pre>
+#### Option 2: Clone the Repository
 
-Paste the following content:
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/oneofthegeeks/goto-sms-sender.git
+   cd goto-sms-sender
+   ```
 
-<pre><code>
+2. **Set up environment variables**
+   ```bash
+   cp env.example .env
+   # Edit .env with your GoTo Connect credentials
+   ```
 
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: always
-    expose:
-      - "5000"
-    environment:
-      - NODE_ENV=production
-      - REDIS_URL=redis://redis:6379
-      - OAUTH_SERVICE_URL=${OAUTH_SERVICE_URL}
-      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}
-      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
-      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
-      - GOTO_ACCOUNT_KEY=${GOTO_ACCOUNT_KEY}
-    depends_on:
-      - redis
-    networks:
-      - app-network
+3. **Start the application**
+   ```bash
+   docker compose up -d
+   ```
 
-  redis:
-    image: redis:alpine
-    restart: always
-    volumes:
-      - redis-data:/data
-    networks:
-      - app-network
+### Access the Application
 
-  nginx:
-    build:
-      context: .
-      dockerfile: nginx.Dockerfile
-    restart: always
-    ports:
-      - "8080:80"
-    volumes:
-      - nginx-logs:/var/log/nginx
-    depends_on:
-      - app
-    networks:
-      - app-network
+- Open http://localhost:8080 in your browser
+- Click "Authorize App" to authenticate with GoTo Connect
+- Start sending SMS messages!
 
-networks:
-  app-network:
-    driver: bridge
+## 📋 Configuration
 
-volumes:
-  redis-data:
-  nginx-logs:
-</code></pre>
+### Environment Variables
 
----
+Copy `env.example` to `.env` and configure the following variables:
 
-### 3. Create a `.env` file
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OAUTH_CLIENT_ID` | Your OAuth client ID from GoTo Developer Portal | `your-client-id` |
+| `OAUTH_CLIENT_SECRET` | Your OAuth client secret | `your-client-secret` |
+| `OAUTH_REDIRECT_URI` | OAuth redirect URI | `http://localhost:8080/login/oauth2/code/goto` |
+| `GOTO_ACCOUNT_KEY` | Your GoTo Connect account key | `your-account-key` |
+| `REDIS_URL` | Redis connection URL (default for Docker) | `redis://redis:6379` |
 
-<pre><code>nano .env
-</code></pre>
+### OAuth Client Setup
 
-Add your GoTo Connect credentials:
+1. Visit the [GoTo Developer Portal](https://developer.goto.com/)
+2. Create a new OAuth client
+3. Set the redirect URI to: `http://localhost:8080/login/oauth2/code/goto`
+4. Add the following scopes:
+   - `messaging.v1.send`
+   - `voice-admin.v1.read`
+5. Copy the client ID and secret to your `.env` file
 
-<pre><code># GoTo Connect OAuth Configuration
-OAUTH_SERVICE_URL=https://authentication.logmeininc.com
-OAUTH_CLIENT_ID=your-client-id-here
-OAUTH_CLIENT_SECRET=your-client-secret-here
-OAUTH_REDIRECT_URI=http://your-domain.com/login/oauth2/code/goto
-# For local testing: http://localhost:8080/login/oauth2/code/goto
+## 🏗️ Architecture
 
-# GoTo Connect Account Key
-GOTO_ACCOUNT_KEY=your-account-key-here
-</code></pre>
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Browser   │    │   NGINX Proxy   │    │  Node.js App    │
+│                 │◄──►│                 │◄──►│                 │
+│   (Port 8080)   │    │   (Port 80)     │    │  (Port 5000)    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                       │
+                                                       ▼
+                                              ┌─────────────────┐
+                                              │     Redis       │
+                                              │   (Port 6379)   │
+                                              └─────────────────┘
+```
 
----
+## 🔧 Development
 
-### 4. Deploy the application
+### Local Development
 
-<pre><code>docker compose up -d
-</code></pre>
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
----
+2. **Set up environment**
+   ```bash
+   cp env.example .env
+   # Configure your .env file
+   ```
 
-## 🌐 Access the Application
+3. **Start Redis** (if not using Docker)
+   ```bash
+   docker run -d -p 6379:6379 redis:alpine
+   ```
 
-- **Local**: http://localhost:8080  
-- **Server**: http://your-server-ip:8080
+4. **Run the application**
+   ```bash
+   npm run dev
+   ```
 
----
+### Docker Development
 
-## 🌍 Configuring Domain Access
+```bash
+# Build and start all services
+docker compose up -d
 
-### Option 1: NGINX Proxy Manager
+# View logs
+docker compose logs -f app
 
-1. Log in to NGINX Proxy Manager
-2. Create a new Proxy Host:
-   - **Domain**: your-domain.com
-   - **Scheme**: http
-   - **Forward Hostname/IP**: your server IP
-   - **Forward Port**: 8080
-   - **SSL**: Enable (use Let's Encrypt)
+# Stop all services
+docker compose down
+```
 
-### Option 2: Standard NGINX Reverse Proxy
+## 🌐 Production Deployment
 
-<pre><code>server {
+### Using Docker Compose
+
+1. **Set up your server**
+   ```bash
+   # Clone the repository
+   git clone https://github.com/oneofthegeeks/goto-sms-sender.git
+   cd goto-sms-sender
+   
+   # Configure environment
+   cp env.example .env
+   nano .env  # Edit with your production values
+   ```
+
+2. **Update OAuth redirect URI**
+   - Change `OAUTH_REDIRECT_URI` to your domain
+   - Update the redirect URI in GoTo Developer Portal
+
+3. **Deploy**
+   ```bash
+   docker compose up -d
+   ```
+
+### Using a Reverse Proxy
+
+For production, you may want to use a reverse proxy like NGINX:
+
+```nginx
+server {
     listen 80;
     server_name your-domain.com;
 
@@ -150,112 +191,154 @@ GOTO_ACCOUNT_KEY=your-account-key-here
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
-</code></pre>
+```
 
----
+## 📊 Monitoring & Logs
 
-## 🔐 OAuth Client Setup
+### View Application Logs
 
-1. Log in to the [GoTo Developer Portal](https://developer.goto.com/)
-2. Navigate to **OAuth Clients**
-3. Set Redirect URIs:
-   - **Production**: `https://your-domain.com/login/oauth2/code/goto`
-   - **Development**: `http://localhost:8080/login/oauth2/code/goto`
-4. Scopes:
-   - `messaging.v1.send`
-   - `voice-admin.v1.read`
+```bash
+# All services
+docker compose logs
 
----
-
-## 🔄 Updating the Application
-
-<pre><code>cd /opt/goto-sms
-docker compose pull
-docker compose build --no-cache
-docker compose up -d
-</code></pre>
-
----
-
-## 📜 Viewing Logs
-
-<pre><code># App logs
+# Specific service
 docker compose logs app
-
-# NGINX logs
 docker compose logs nginx
-
-# Redis logs
 docker compose logs redis
 
 # Follow logs in real-time
 docker compose logs -f app
-</code></pre>
+```
 
----
+### Health Check
+
+The application includes a health check endpoint:
+```bash
+curl http://localhost:8080/health
+```
+
+## 🔄 Updating
+
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild and restart
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
 
 ## 🛠️ Troubleshooting
 
-### Authentication Issues
+### Common Issues
 
-- Double-check your OAuth credentials in `.env`
-- Make sure the Redirect URI matches what's in the GoTo Developer Portal
-- Confirm your account has the correct permissions
+#### Authentication Problems
+- ✅ Verify your OAuth credentials in `.env`
+- ✅ Check that redirect URI matches GoTo Developer Portal
+- ✅ Ensure your account has the required permissions
 
-### SMS Sending Issues
+#### SMS Sending Issues
+- ✅ Verify your `GOTO_ACCOUNT_KEY`
+- ✅ Check phone number format (E.164: `+18005551234`)
+- ✅ Confirm SMS is enabled on your account
 
-- Verify your `GOTO_ACCOUNT_KEY`
-- Ensure phone numbers are in E.164 format (e.g. `+18005551234`)
-- Check if SMS functionality is enabled on your account
-
-### Container Issues
-
-<pre><code># Check container status
+#### Container Issues
+```bash
+# Check container status
 docker compose ps
 
 # View container details
-docker inspect &lt;container_id&gt;
-</code></pre>
+docker inspect <container_id>
 
----
+# Restart specific service
+docker compose restart app
+```
 
-## 🧱 Architecture
+### Redis Data Management
 
-This application consists of:
-
-- **Node.js App**: Handles API and front-end
-- **Redis**: Stores tokens and message data
-- **NGINX**: Reverse proxy and static server
-
----
-
-## 💾 Data Persistence
-
-Redis data is stored in a Docker volume.
-
-### Backup Redis:
-
-<pre><code>docker compose exec redis redis-cli SAVE
+```bash
+# Backup Redis data
+docker compose exec redis redis-cli SAVE
 docker cp $(docker compose ps -q redis):/data/dump.rdb ./redis-backup.rdb
-</code></pre>
 
-### Restore Redis:
-
-<pre><code>docker cp ./redis-backup.rdb $(docker compose ps -q redis):/data/dump.rdb
+# Restore Redis data
+docker cp ./redis-backup.rdb $(docker compose ps -q redis):/data/dump.rdb
 docker compose restart redis
-</code></pre>
+```
 
----
+## 🔒 Security Considerations
 
-## 🔒 Security Notes
+- 🔐 Never commit your `.env` file to version control
+- 🔐 Use HTTPS in production environments
+- 🔐 Consider setting a Redis password for production
+- 🔐 Regularly update Docker images and dependencies
+- 🔐 Monitor application logs for suspicious activity
 
-- Never commit your `.env` file to version control
-- Consider setting a Redis password in production
-- Always use HTTPS for live environments
-- Regularly update Docker images and dependencies
+## 📝 API Reference
 
----
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Main SMS interface |
+| `GET` | `/authorize` | Start OAuth flow |
+| `GET` | `/login/oauth2/code/goto` | OAuth callback |
+| `POST` | `/send-sms` | Send SMS message |
+| `GET` | `/refresh-numbers` | Refresh phone numbers |
+| `GET` | `/health` | Health check |
+
+### SMS API Format
+
+```json
+{
+  "ownerPhoneNumber": "+18005551234",
+  "contactPhoneNumbers": ["+18005559876"],
+  "body": "Your message here"
+}
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- 📧 **Email**: support@yourdomain.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/oneofthegeeks/goto-sms-sender/issues)
+- 📖 **Documentation**: [GoTo Connect API Docs](https://developer.goto.com/)
+
+## 🐳 Docker Hub
+
+This project is also available on Docker Hub for easy deployment:
+
+```bash
+# Pull the latest image
+docker pull oneofthegeeks/goto-sms-sender:latest
+
+# Run with custom environment
+docker run -d \
+  -p 8080:8080 \
+  -e OAUTH_CLIENT_ID=your-client-id \
+  -e OAUTH_CLIENT_SECRET=your-client-secret \
+  -e GOTO_ACCOUNT_KEY=your-account-key \
+  oneofthegeeks/goto-sms-sender:latest
+```
+
+### Available Tags
+
+- `latest` - Latest stable release
+- `v1.0.0` - Specific version (replace with actual version)
+- `main` - Latest from main branch
+
+---
+
+**Made with ❤️ for the GoTo Connect community**

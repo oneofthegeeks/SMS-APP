@@ -1,17 +1,47 @@
 {
   "name": "goto-sms-sender",
   "version": "1.0.0",
-  "description": "SMS sender app for GoTo Connect",
+  "description": "A modern, containerized web application for sending SMS messages through GoTo Connect's API",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "nodemon app.js",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
+    "docker:restart": "docker compose restart app",
+    "install:quick": "cp env.example .env && echo 'Please edit .env with your credentials'",
+    "test": "echo 'No tests specified' && exit 0"
   },
+  "keywords": [
+    "goto-connect",
+    "sms",
+    "messaging",
+    "oauth",
+    "docker",
+    "nodejs",
+    "express",
+    "redis"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oneofthegeeks/goto-sms-sender.git"
+  },
+  "bugs": {
+    "url": "https://github.com/oneofthegeeks/goto-sms-sender/issues"
+  },
+  "homepage": "https://github.com/oneofthegeeks/goto-sms-sender#readme",
   "dependencies": {
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "redis": "^4.6.6",
     "simple-oauth2": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=18.0.0"
