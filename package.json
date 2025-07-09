@@ -12,7 +12,7 @@
     "docker:logs": "docker compose logs -f app",
     "docker:restart": "docker compose restart app",
     "install:quick": "cp env.example .env && echo 'Please edit .env with your credentials'",
-    "test": "echo 'No tests specified' && exit 0"
+    "test": "echo 'No tests configured yet' && exit 0"
   },
   "keywords": [
     "goto-connect",
